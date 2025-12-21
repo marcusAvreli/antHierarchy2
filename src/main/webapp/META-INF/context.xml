@@ -1,0 +1,15 @@
+<Context>
+    <Resource name="jdbc/reportingDS"
+              auth="Container"
+              type="javax.sql.DataSource"
+              factory="org.apache.tomcat.jdbc.pool.DataSourceFactory"
+              driverClassName="com.mysql.cj.jdbc.Driver"
+              url="jdbc:mysql://192.168.46.129:3306/humanResources?allowPublicKeyRetrieval=true&amp;useSSL=false&amp;serverTimezone=UTC"
+              username="humanResources_root"
+              password="zubur1"
+              maxActive="20"
+              maxIdle="10"
+              minIdle="5"
+              testOnBorrow="true"
+              validationQuery="SELECT 1"/>
+</Context>

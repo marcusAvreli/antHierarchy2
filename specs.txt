@@ -1,0 +1,97 @@
+prepare example pure json data set for sending from rest api to angular client.
+data set must have:
+1. 7 hierarchy levels
+2. up to 150 employees and not less of  75: ceo, cto, managers,employees
+3. entries continaing: first name last name entitlement, orgunit code
+
+main purpose of this set up:
+1. build lazy loading from rest api
+2. memory management on angular site: when user expands all nodes - memory usage increasing, when nodes closed release relevant memory.
+3. when memory usage on angular site close to some limit show modal message
+4. nodes of tree are togglable
+5. tree supports searching without collapsing the tree
+6. in case of search: 
+	a. without collapsing the tree
+	b. when nodes does not exist in memory send request to backend
+	c. append search result to existing tree
+7. input data has field of parentId[],childId[]
+8. input data is flat list without recursion
+
+
+
+
+/api/org?mode=managerial
+/api/org?mode=branch
+/api/org?mode=orgunit
+/api/org?mode=contract
+/api/org?mode=costcenter
+
+
+manager_id
+company_code + branch_id
+branch_id (or branch → department)
+org_unit_code
+position_code + manager_id
+cost_center
+contract_code
+job_key / job_name
+
+
+
+
+
+{
+  "id": "1",
+  "firstName": "Alice",
+  "lastName": "Johnson",
+  "title": "CEO",
+  "entitlement": "Executive Access",
+  "orgUnitCode": "EXEC",
+  "contract_code":1
+  "children": [
+    {
+      "id": "2",
+      "firstName": "Bob",
+      "lastName": "Miller",
+      "title": "CTO",
+      "entitlement": "Tech Admin",
+      "orgUnitCode": "TECH",
+	   "contract_code":2
+      "children": [
+        {
+          "id": "5",
+          "firstName": "Eve",
+          "lastName": "Williams",
+          "title": "Engineering Manager",
+          "entitlement": "Engineering Lead",
+          "orgUnitCode": "TECH-ENG",
+		   "contract_code":3
+          "children": [
+            {
+			
+			
+			existing contract codes
+100 ,40 ,30 ,5 ,20 ,4 ,3 ,2 ,1
+
+build recursive function. when function receives null return similar structure with first three minimal contract codes, afterwards function will receive from client next contract code to show.
+the purpose is to show hirachical tree of arganization in angular using d3 library. show java endpoint similar to following. 
+
+
+propose possible parameters that can be used instead of contract codes to show hierachial tree of ofrgnization, show whcih additanl data we can send to angular application. currently i have following data on employee
+company_code
+company_name
+contract_code
+cost_center
+email
+firstName
+image
+job_key
+job_name
+lastName
+name
+org_unit_code
+phoneNumber
+position_code
+title
+branch_id
+manager_id

@@ -1,0 +1,43 @@
+<!--
+https://github.com/owlcs/ore-framework/blob/3f4b2d2394e2af91603a0d963330692f15b2489d/build-input.xml
+https://github.com/OPENDAP/olfs
+https://github.com/i2p/i2p.i2p-bote/blob/0775c4dd499ccc09ab4332e7d5faf7bb3b9e8540/win32installer/build.xml.old#L433
+https://github.com/ezScrum/ezScrum/tree/16651e1c4f7cc365cc05db08e8d2e870a6c4cca3/java/ntut
+//
+src
+	testableRest5
+		Application.java
+		Context.java
+lib	
+	*.jar
+resources
+	appllication.properties
+	logging.properties
+-->
+	<!--
+	https://github.com/dprophet/exist
+	-->
+<project default="all">
+	  <property file="project.properties"/>
+	 <property file="build.properties"/>
+	
+	<property name="lib" location="lib" />
+	<property name="build" value="build" />
+	<property name="src" location="src/main/java" />
+	<property name="doc" location="${build}/javadoc" />
+	<property name="classes.dir" value="${basedir}/classes"/>
+	<property name="output.dir" value="${basedir}/output"/>
+	<path id="project.class.path">
+			 <pathelement location="${classes.dir}"/>
+	        <fileset dir="lib">
+	            <include name="tomcat/*.jar"/>
+	      </fileset>
+		 <fileset dir="lib">
+			            <include name="jersey/*.jar"/>
+			      </fileset>
+		</path>
+	
+
+	<import file="build/scripts/build-impl.xml"/>
+
+</project>

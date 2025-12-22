@@ -1,0 +1,27 @@
+git init
+git remote add origin "https://github.com/marcusAvreli/antHierarchy2.git"
+
+
+echo "bin/" >> .gitignore
+echo "classes/" >> .gitignore
+echo "lib/" >> .gitignore
+echo "output/" >> .gitignore
+echo "WEB-INF/" >> .gitignore
+echo ".classpath" >> .gitignore
+echo ".project" >> .gitignore
+echo ".settings/" >> .gitignore
+
+git add -- . :!".bin" :!"classes" :!"lib" :!"output" :!"WEB-INF" :!".classpath" :!".project" :!".settings"
+
+git rm -r --cached bin
+git rm -r --cached classes
+git rm -r --cached lib
+git rm -r --cached output
+git rm -r --cached WEB-INF
+git rm -r --cached ".classpath"
+git rm -r --cached ".project"
+git rm -r --cached ".settings/"	
+
+
+git commit -am "initial_commit"
+git push origin master

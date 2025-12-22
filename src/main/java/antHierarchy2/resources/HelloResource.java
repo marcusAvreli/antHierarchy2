@@ -4,6 +4,7 @@ package antHierarchy2.resources;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -284,7 +285,45 @@ public class HelloResource {
 			        // Step 4: Return a flat list — no recursive nesting
 			        return ApiResponse.success(new ArrayList<>(nodeMap.values()));
 	    }
-	    		
+	    @GET
+	    @Path("/division")
+	    @Produces(MediaType.APPLICATION_JSON)
+	    public ApiResponse division(	) {
+	    	String parentId = "64b6d7755a2a4cc1bd1e7a610c47b750";
+	    	Map<String,Object> devisionsByManager = new HashMap<String,Object>();
+	    	Map<String,String> divisionsMap = new HashMap<String,String>();
+	    	divisionsMap.put("devisionName", "Devision1");
+	    	devisionsByManager.put("802285098", divisionsMap);
+	    	
+	    	divisionsMap = new HashMap<String,String>();
+	    	divisionsMap.put("devisionName", "Devision2");
+	    	devisionsByManager.put("964164628", divisionsMap);
+	    	
+	    	divisionsMap = new HashMap<String,String>();
+	    	divisionsMap.put("devisionName", "Devision3");
+	    	devisionsByManager.put("674338900", divisionsMap);
+	    	
+	    	divisionsMap = new HashMap<String,String>();
+	    	divisionsMap.put("devisionName", "Devision4");
+	    	devisionsByManager.put("569503055", divisionsMap);
+	    	
+	    	divisionsMap = new HashMap<String,String>();
+	    	divisionsMap.put("devisionName", "Devision5");
+	    	devisionsByManager.put("402999213", divisionsMap);
+	    	
+	    	divisionsMap = new HashMap<String,String>();
+	    	divisionsMap.put("devisionName", "Devision6");
+	    	devisionsByManager.put("771265378", divisionsMap);
+	    	
+	    	
+	    	Iterator<Map.Entry<String,Object>> devisionsByManagerIter = devisionsByManager.entrySet().iterator();
+	    	
+	    	while(devisionsByManagerIter.hasNext()) {
+	    		Map.Entry<String,Object> devisionByManagerIter = devisionsByManagerIter.next();
+	    		String teudatZehut = devisionByManagerIter.getKey();
+	    		employeeRepo.getByTeudatZehut(teudatZehut);
+	    	}
+	    }
 	    
 	   
 }

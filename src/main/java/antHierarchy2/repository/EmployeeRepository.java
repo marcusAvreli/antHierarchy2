@@ -696,4 +696,38 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
               em.close();
           }
     }
+    public OrgNodeDTO getByTeudatZehut(String teudatZehut){
+    	 EntityManager em = emf.createEntityManager();
+    	 List<OrgNodeDTO> orgNodes = new ArrayList<OrgNodeDTO>();
+         try {
+        	 
+        	 String sql="select name"
+        	 		+ ",firstName"
+        	 		+ ",lastName"
+        	 		+ ",manager_id"
+        	 		+ ",teudat_zehut"
+        	 		+ ",id "
+        	 		+ "from employee where teudat_zehut=:teudat_zehut";
+        	 @SuppressWarnings("unchecked")
+          	 Object[] results = (Object[]) em.createNativeQuery(sql)
+                        .setParameter("teudat_zehut", teudatZehut)
+                        .getSingleResult();
+
+          	
+                
+                     OrgNodeDTO dto = new OrgNodeDTO();
+                     dto.setName((String)results[0]);
+                     dto.setFirstName((String)results[1]);
+                     dto.setLastName((String)results[2]);
+                     dto.setManagerId((String)results[3]);
+                     dto.setTeudatZehut((String)results[4]);
+                     dto.setId((String)results[5]);
+                     orgNodes.add(dto);
+                     
+                
+                 return dto ;
+         } finally {
+             em.close();
+         }
+    }
 }

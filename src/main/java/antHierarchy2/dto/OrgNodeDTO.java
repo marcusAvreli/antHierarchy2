@@ -36,6 +36,7 @@ public class OrgNodeDTO {
 	private String jobKey;
 	private String jobName;
 	private String image;
+	private String divisionName;
 	private boolean childrenLoaded = false; // lazy load indicator
 	private List<String> parentPath;
 	private List<OrgNodeDTO> children;

@@ -11,7 +11,7 @@ echo ".classpath" >> .gitignore
 echo ".project" >> .gitignore
 echo ".settings/" >> .gitignore
 
-git add -- . :!".bin" :!"classes" :!"lib" :!"output" :!"WEB-INF" :!".classpath" :!".project" :!".settings"
+git add -- . :!"bin" :!"classes" :!"lib" :!"output" :!"WEB-INF" :!".classpath" :!".project" :!".settings"
 
 git rm -r --cached bin
 git rm -r --cached classes

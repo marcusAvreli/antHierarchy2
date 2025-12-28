@@ -4,11 +4,13 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
@@ -32,64 +34,58 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
      * Managerial mode: find top-level employees (no manager)
      */
     public List<OrgNodeDTO> findRootManagers() {
-        EntityManager em = emf.createEntityManager();
-        try {
-        	
-        	String jpql = "SELECT new antHierarchy2.dto.OrgNodeDTO(" +
-                    "  e.id, " +
-                    "  e.name, " +
-                    "  e.firstName, " +
-                    "  e.lastName, " +
-                    "  e.title, " +
-                    "  'employee', " +
-                    "  e.companyCode, " +
-                    "  e.companyName, " +
-                    "  e.teudatZehut, " +
-                    "  e.gender, " +
-                    "  e.birthday, " +
-                    "  e.jobBeginDate, " +
-                    "  '', " +
-                    "  '', " +
-                    "  '', " +
-               //     "  CASE WHEN e.branch.company.parent IS NOT NULL THEN e.branch.company.parent.companyCode ELSE null END, " +
-                 //   "  CASE WHEN e.branch.company.parent IS NOT NULL THEN e.branch.company.parent.companyName ELSE null END, " +
-                 	
-                   // "  e.branch.id, " +
-                    "  e.manager.id, " +
-                    "  e.orgUnitCode, " +
-                    "  e.costCenter, " +
-                    "  e.contractCode, " +
-                    
-                    "  e.email, " +
-                    "  e.phoneNumber, " +
-                    "  e.position, " +
-                    "  e.jobKey, " +
-                    "  e.jobName, " +
-                    "  e.image, " +
-                    "  false," +  
-                    "  CASE WHEN EXISTS (" +
-                    "       SELECT 1 FROM Employee c WHERE c.manager.id = e.id" +
-                    "  ) THEN true ELSE false END " +
-                    
-                    ") " +
-                    "FROM Employee e " +
-                    "JOIN Company c ON e.companyCode = c.companyCode " +
-                   // "LEFT JOIN Company pc ON c.parent.id = pc.id " +
-                    
-                    
-                    "WHERE " +
-                    "  (e.companyCode = '001' AND e.title IN ('President')) "  // central company President & CEO
-                  //  "  OR " +
-                //    "  (pc.companyCode = '001' AND e.title = 'President')"  
-                   ;
+    	EntityManager em = emf.createEntityManager();
+    	try {
 
-        	
-        	
-            return em.createQuery(jpql, OrgNodeDTO.class)
-                .getResultList();
-        } finally {
-            em.close();
-        }
+    	    String jpql =
+    	        "SELECT new antHierarchy2.dto.OrgNodeDTO(" +
+    	        "  e.id, e.name, e.firstName, e.lastName, e.title, 'employee', " +
+    	        "  e.companyCode, e.companyName, e.teudatZehut, e.gender, " +
+    	        "  e.birthday, e.jobBeginDate, '', '', '', e.manager.id, " +
+    	        "  e.orgUnitCode, e.costCenter, e.contractCode, " +
+    	        "  e.email, e.phoneNumber, e.position, e.jobKey, e.jobName, " +
+    	        "  e.image, false, false" +
+    	        ") " +
+    	        "FROM Employee e " +
+    	        "JOIN Company c ON e.companyCode = c.companyCode " +
+    	        "WHERE (e.companyCode = '001' AND e.title IN ('President'))";
+
+    	    List<OrgNodeDTO> result =
+    	        em.createQuery(jpql, OrgNodeDTO.class).getResultList();
+
+    	    if (!result.isEmpty()) {
+
+    	        Set<String> managerIds = result.stream()
+    	            .map(OrgNodeDTO::getId)
+    	            .collect(Collectors.toSet());
+
+    	        List<Object[]> rows = em.createQuery(HAS_CHILDREN_HQL, Object[].class)
+    	            .setParameter("managerIds", managerIds)
+    	            .getResultList();
+
+    	        Map<String, Long> childrenCount = new HashMap<>();
+    	        for (Object[] row : rows) {
+    	            childrenCount.put((String) row[0], (Long) row[1]);
+    	        }
+
+    	        for (OrgNodeDTO node : result) {
+    	            Long cnt = childrenCount.get(node.getId());
+    	            if (cnt != null && cnt > 0) {
+    	                node.setHasChildren(true);
+    	                node.setNumberOfChildren(cnt.intValue());
+    	                node.setChildrenLoaded(false);
+    	            } else {
+    	                node.setHasChildren(false);
+    	                node.setNumberOfChildren(0);
+    	            }
+    	        }
+    	    }
+
+    	    return result;
+
+    	} finally {
+    	    em.close();
+    	}
     }
 
     /**
@@ -105,39 +101,32 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
         	result = em.createQuery(
                 "SELECT new antHierarchy2.dto.OrgNodeDTO("+
                 		 "  e.id, " +
-                         "  e.name, " +
-                         "  e.firstName, " +
-                         "  e.lastName, " +
-                         "  e.title, " +
-                         "  'employee', " +
-                         "  e.companyCode, " +
-                         "  e.companyName, " +
-                         "  e.teudatZehut, " +
-                         "  e.gender, " +
-                         "  e.birthday, " +
-                         "  e.jobBeginDate, " +
-                         "  '', " +
-                         "  '', " +
-                         "  '', " +
-                    //     "  CASE WHEN e.branch.company.parent IS NOT NULL THEN e.branch.company.parent.companyCode ELSE null END, " +
-                      //   "  CASE WHEN e.branch.company.parent IS NOT NULL THEN e.branch.company.parent.companyName ELSE null END, " +
-                      	
-                        // "  e.branch.id, " +
-                         "  e.manager.id, " +
-                         "  e.orgUnitCode, " +
-                         "  e.costCenter, " +
-                         "  e.contractCode, " +
-                         
-                         "  e.email, " +
-                         "  e.phoneNumber, " +
-                         "  e.position, " +
-                         "  e.jobKey, " +
-                         "  e.jobName, " +
-                         "  e.image, " +
-                         "  false," +     
-                         "  CASE WHEN EXISTS (" +
-                         "       SELECT 1 FROM Employee c WHERE c.manager.id = e.id" +
-                         "  ) THEN true ELSE false END " +
+                		    "  e.name, " +
+                		    "  e.firstName, " +
+                		    "  e.lastName, " +
+                		    "  e.title, " +
+                		    "  'employee', " +
+                		    "  e.companyCode, " +
+                		    "  e.companyName, " +
+                		    "  e.teudatZehut, " +
+                		    "  e.gender, " +
+                		    "  e.birthday, " +
+                		    "  e.jobBeginDate, " +
+                		    "  '', " +
+                		    "  '', " +
+                		    "  '', " +
+                		    "  e.manager.id, " +
+                		    "  e.orgUnitCode, " +
+                		    "  e.costCenter, " +
+                		    "  e.contractCode, " +
+                		    "  e.email, " +
+                		    "  e.phoneNumber, " +
+                		    "  e.position, " +
+                		    "  e.jobKey, " +
+                		    "  e.jobName, " +
+                		    "  e.image, " +
+                		    "  false, " +   // childrenLoaded
+                		    "  false  " +   // hasChildren (temporary)
                  ") " +
                 "FROM Employee e WHERE e.manager.id = :parentId", OrgNodeDTO.class)
                 .setParameter("parentId", parentId)
@@ -154,6 +143,38 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
         			orgNode.setParentPath(parentPath);
         			}
         		}
+        	
+        	
+
+        	    Set<String> managerIds = result.stream()
+        	        .map(OrgNodeDTO::getId)
+        	        .collect(Collectors.toSet());
+
+        	    List<Object[]> rows = em.createQuery(HAS_CHILDREN_HQL, Object[].class)
+        	        .setParameter("managerIds", managerIds)
+        	        .getResultList();
+
+        	    // managerId -> children count
+        	    Map<String, Long> childrenCount = new HashMap<>();
+        	    for (Object[] row : rows) {
+        	        childrenCount.put(
+        	            (String) row[0],
+        	            (Long) row[1]
+        	        );
+        	    }
+
+        	    // apply counts to nodes
+        	    for (OrgNodeDTO node : result) {
+        	        Long cnt = childrenCount.get(node.getId());
+        	        if (cnt != null && cnt > 0) {
+        	            node.setHasChildren(true);
+        	            node.setNumberOfChildren(cnt.intValue());
+        	            node.setChildrenLoaded(false);
+        	        } else {
+        	            node.setHasChildren(false);
+        	            node.setNumberOfChildren(0);
+        	        }
+        	    }
         	}
         	return result;
         } finally {
@@ -730,4 +751,209 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
              em.close();
          }
     }
+    
+    private String HQL_QUERY="SELECT new antHierarchy2.dto.OrgNodeDTO(\r\n"
+    		
+    		+"e.id,\r\n"
+    		+ "e.name,\r\n"
+    		+ "e.firstName,\r\n"
+    		+ "e.lastName,\r\n"
+    		+ "e.title,\r\n"
+    		+ "'employee',\r\n"
+    		+ "e.companyCode,\r\n"
+    		+ "c.companyName,\r\n"
+    		+ "e.teudatZehut,\r\n"
+    		+ "e.gender,\r\n"
+    		+ "e.birthday,\r\n"
+    		+ "e.jobBeginDate,\r\n"
+    		+ "pc.companyCode,\r\n"
+    		+ "pc.companyName,\r\n"
+    		+ "e.branch.id,\r\n"
+    		+ "e.manager.id,\r\n"
+    		+ "e.orgUnitCode,\r\n"
+    		+ "e.costCenter,\r\n"
+    		+ "e.contractCode,\r\n"
+    		+ "e.email,\r\n"
+    		+ "e.phoneNumber,\r\n"
+    		+ "e.position,\r\n"
+    		+ "e.jobKey,\r\n"
+    		+ "e.jobName,\r\n"
+    		+ "e.image,\r\n"
+    		+ "FALSE,\r\n"
+    		+ "FALSE"
+    	
+    		+ ")\r\n"
+    		+ "FROM Employee e\r\n"
+    		+ "LEFT JOIN Company c  ON c.companyCode = e.companyCode\r\n"
+    		+ "LEFT JOIN Company pc ON pc.id = c.parent.id\r\n"
+    		+ "WHERE e.manager.id IN :managerIds";
+    
+    private static final String HAS_CHILDREN_HQL =
+    	    "SELECT e.manager.id, COUNT(e.id) " +
+    	    "FROM Employee e " +
+    	    "WHERE e.manager.id IN :managerIds " +
+    	    "GROUP BY e.manager.id";
+    public List<OrgNodeDTO> loadEmployeesDownTreeHql(
+            String rootId,
+            int levels
+    ) {
+    	EntityManager em = emf.createEntityManager();
+        Map<String, OrgNodeDTO> result = new LinkedHashMap<>();
+
+        
+        
+        
+        OrgNodeDTO rootNode = em.createQuery(
+                "SELECT new antHierarchy2.dto.OrgNodeDTO(" +
+                "e.id," +
+                "e.name," +
+                "e.firstName," +
+                "e.lastName," +
+                "e.title," +
+                "'employee'," +
+                "e.companyCode," +
+                "c.companyName," +
+                "e.teudatZehut," +
+                "e.gender," +
+                "e.birthday," +
+                "e.jobBeginDate," +
+                "pc.companyCode," +
+                "pc.companyName," +
+                "e.branch.id," +
+                "e.manager.id," +
+                "e.orgUnitCode," +
+                "e.costCenter," +
+                "e.contractCode," +
+                "e.email," +
+                "e.phoneNumber," +
+                "e.position," +
+                "e.jobKey," +
+                "e.jobName," +
+                "e.image," +
+                "FALSE," +
+                "FALSE" +
+                ")" +
+                "FROM Employee e " +
+                "LEFT JOIN Company c ON c.companyCode = e.companyCode " +
+                "LEFT JOIN Company pc ON pc.id = c.parent.id " +
+                "WHERE e.id = :rootId", OrgNodeDTO.class)
+            .setParameter("rootId", rootId)
+            .getSingleResult();
+
+        // add root to result map
+        result.put(rootNode.getId(), rootNode);
+      
+        
+        
+        
+        
+        
+        
+        
+        
+        // current level managers
+        Set<String> currentManagers = new HashSet<String>();
+        currentManagers.add(rootId);
+
+        // parent path tracking
+        Map<String, List<String>> parentPaths = new HashMap<>();
+        parentPaths.put(rootNode.getId(), List.of());
+        parentPaths.put(rootId, List.of());
+
+        for (int depth = 1; depth <= levels; depth++) {
+            if (currentManagers.isEmpty()) break;
+
+            List<OrgNodeDTO> level = em
+                .createQuery(HQL_QUERY, OrgNodeDTO.class)
+                .setParameter("managerIds", currentManagers)
+                .getResultList();
+
+            currentManagers = new HashSet<>();
+
+            for (OrgNodeDTO node : level) {
+                // ----- parent path -----
+                List<String> parentPath =
+                    new ArrayList<>(parentPaths.get(node.getManagerId()));
+                parentPath.add(node.getManagerId());
+
+                node.setParentPath(parentPath);
+                node.setNumberOfParents(parentPath.size());
+
+                // ----- hierarchy flags -----
+                node.setHasChildren(true); // assume true, verified later
+                node.setChildrenLoaded(false);
+                node.setChildren(new ArrayList<>());
+                node.setChildrenIds(new ArrayList<>());
+
+                result.put(node.getId(), node);
+
+                parentPaths.put(node.getId(), parentPath);
+                currentManagers.add(node.getId());
+            }
+        }
+      
+        
+        
+        
+        
+        
+        
+        // ---------- post-processing ----------
+        // count children & childrenIds
+        Map<String, List<OrgNodeDTO>> groupedByManager =
+            result.values().stream()
+                .filter(n -> n.getManagerId() != null)
+                .collect(Collectors.groupingBy(OrgNodeDTO::getManagerId));
+
+        for (OrgNodeDTO node : result.values()) {
+            List<OrgNodeDTO> kids = groupedByManager.get(node.getId());
+            if (kids != null) {
+                node.setNumberOfChildren(kids.size());
+                /*node.setChildrenIds(
+                    kids.stream().map(OrgNodeDTO::getId).toList()
+                );*/
+                kids.stream()
+                .map(OrgNodeDTO::getId)
+                .collect(Collectors.toList());
+            } else {
+                node.setHasChildren(false);
+                node.setNumberOfChildren(0);
+            }
+        }
+        Set<String> deepestNodeIds = new HashSet<>(currentManagers);
+        deepestNodeIds.add(rootId); 
+        if (!deepestNodeIds.isEmpty()) {
+
+            List<Object[]> rows = em.createQuery(HAS_CHILDREN_HQL, Object[].class)
+                .setParameter("managerIds", deepestNodeIds)
+                .getResultList();
+
+            // map: managerId -> real children count
+            Map<String, Long> realChildrenCount = new HashMap<>();
+            for (Object[] row : rows) {
+                realChildrenCount.put(
+                    (String) row[0],
+                    (Long) row[1]
+                );
+            }
+
+            // apply to deepest nodes only
+            for (String nodeId : deepestNodeIds) {
+                OrgNodeDTO node = result.get(nodeId);
+                if (node == null) continue;
+
+                Long cnt = realChildrenCount.get(nodeId);
+                if (cnt != null && cnt > 0) {
+                    node.setHasChildren(true);
+                    node.setNumberOfChildren(cnt.intValue());
+                    node.setChildrenLoaded(false); // important: children exist but not loaded
+                } else {
+                    node.setHasChildren(false);
+                    node.setNumberOfChildren(0);
+                }
+            }
+        }
+        return new ArrayList<>(result.values());
+    }
+
 }

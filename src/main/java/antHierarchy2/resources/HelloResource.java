@@ -285,7 +285,7 @@ public class HelloResource {
 			        // Step 4: Return a flat list — no recursive nesting
 			        return ApiResponse.success(new ArrayList<>(nodeMap.values()));
 	    }
-	    @GET
+	   /* @GET
 	    @Path("/division")
 	    @Produces(MediaType.APPLICATION_JSON)
 	    public ApiResponse division(	) {
@@ -324,6 +324,16 @@ public class HelloResource {
 	    		employeeRepo.getByTeudatZehut(teudatZehut);
 	    	}
 	    }
-	    
-	   
+	    */
+	    @GET
+	    @Path("/loadEmployeesDown")
+	    @Produces(MediaType.APPLICATION_JSON)
+	    public ApiResponse loadEmployeesDown(
+	    		 @QueryParam("employeeId") String employeeId,
+		            @QueryParam("levels") int levels
+	    		
+	    		){
+	    	List<OrgNodeDTO> allNodes = employeeRepo.loadEmployeesDownTreeHql(employeeId,levels); // fetch all nodes (or at least all relevant)
+	    	return ApiResponse.success(allNodes);
+	    }
 }

@@ -42,6 +42,32 @@ public class OrgNodeDTO {
 	private List<OrgNodeDTO> children;
 	private List<String> childrenIds;
 	private boolean hasChildren = false;
+	private int numberOfChildren;
+	private int  numberOfParents;
+	public int getNumberOfChildren() {
+		return numberOfChildren;
+	}
+
+	public String getDivisionName() {
+		return divisionName;
+	}
+
+	public void setDivisionName(String divisionName) {
+		this.divisionName = divisionName;
+	}
+
+	public void setNumberOfChildren(int numberOfChildren) {
+		this.numberOfChildren = numberOfChildren;
+	}
+
+	public int getNumberOfParents() {
+		return numberOfParents;
+	}
+
+	public void setNumberOfParents(int numberOfParents) {
+		this.numberOfParents = numberOfParents;
+	}
+
 	public boolean isHasChildren() {
 		return hasChildren;
 	}
@@ -108,7 +134,7 @@ public class OrgNodeDTO {
 	public void setParentPath(List<String> parentPath) {
 		this.parentPath = parentPath;
 	}
-
+/*
 	public OrgNodeDTO(String id, String name, String firstName, String lastName, String title, String type,
 			String companyCode, String companyName, String parentCompanyCode, String parentCompanyName, String branchId,
 			String managerId, String orgUnitCode, String costCenter, String contractCode, String email,
@@ -140,7 +166,7 @@ public class OrgNodeDTO {
 		this.childrenIds = new ArrayList<String>();
 		this.hasChildren = hasChildren;
 	}
-
+*/
 	public List<String> getChildrenIds() {
 		return childrenIds;
 	}

@@ -113,8 +113,18 @@ public class Employee extends BaseEntity {
     @Column(name = "company_name", length = 450, nullable = false)
     private String companyName;
     
-
-    public String getCompanyCode() {
+/*
+    @Column(name = "branch_id", length = 255, nullable = true)
+	private String branchId;
+    
+    public String getBranchId() {
+		return branchId;
+	}
+	public void setBranchId(String branchId) {
+		this.branchId = branchId;
+	}
+	*/
+	public String getCompanyCode() {
 		return companyCode;
 	}
 	public void setCompanyCode(String companyCode) {

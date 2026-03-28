@@ -336,4 +336,12 @@ public class HelloResource {
 	    	List<OrgNodeDTO> allNodes = employeeRepo.loadEmployeesDownTreeHql(employeeId,levels); // fetch all nodes (or at least all relevant)
 	    	return ApiResponse.success(allNodes);
 	    }
+	    @GET
+	    @Path("/getEmployeesUpToRoot")
+	    @Produces(MediaType.APPLICATION_JSON)
+	    public ApiResponse  getEmployeesUpToRoot( @QueryParam("scope") String rootId ,@QueryParam("costCenter") String costCenter,@QueryParam("field") String field) {
+	    	
+	    	List<OrgNodeDTO> allNodes = employeeRepo.getEmployeesUpToRoot(rootId,costCenter,field); // fetch all nodes (or at least all relevant)
+	    	return ApiResponse.success(allNodes);
+	    }
 }

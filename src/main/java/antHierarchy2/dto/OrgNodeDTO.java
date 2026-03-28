@@ -1,6 +1,9 @@
 package antHierarchy2.dto;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import antHierarchy2.model.Employee;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -44,6 +47,24 @@ public class OrgNodeDTO {
 	private boolean hasChildren = false;
 	private int numberOfChildren;
 	private int  numberOfParents;
+	private OrgNodeDTO parent;
+	private String parentId;
+	public OrgNodeDTO getParent() {
+		return parent;
+	}
+
+	public void setParent(OrgNodeDTO parent) {
+		this.parent = parent;
+	}
+
+	public String getParentId() {
+		return parentId;
+	}
+
+	public void setParentId(String parentId) {
+		this.parentId = parentId;
+	}
+
 	public int getNumberOfChildren() {
 		return numberOfChildren;
 	}
@@ -82,7 +103,7 @@ public class OrgNodeDTO {
 	public OrgNodeDTO(String id, String name, String firstName, String lastName, String title, String type,
 			String companyCode, String companyName,String teudatZehut, String gender, Long birthday, Long jobBeginDate, String parentCompanyCode, String parentCompanyName, String branchId,
 			String managerId, String orgUnitCode, String costCenter, int contractCode, String email, String phoneNumber,
-			int positionCode, String jobKey, String jobName, String image, boolean childrenLoaded,boolean hasChildren) {
+			int positionCode, String jobKey, String jobName, String image, boolean childrenLoaded,boolean hasChildren, Long numberOfChildren) {
 		/*
 		 * String jpql = "SELECT new antHierarchy2.dto.OrgNodeDTO(" + "  e.id, " +
 		 * "  e.name, " + "  e.firstName, " + "  e.lastName, " + "  e.title, " +
@@ -124,6 +145,7 @@ public class OrgNodeDTO {
 		this.children = new ArrayList<>();
 		this.childrenIds = new ArrayList<String>();
 		this.hasChildren = hasChildren;
+		
 
 	}
 

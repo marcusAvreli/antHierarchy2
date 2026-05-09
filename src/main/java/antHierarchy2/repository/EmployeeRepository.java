@@ -919,7 +919,600 @@ public List<OrgNodeDTO> findByManagerId(String parentId) {
 	}
 
 	/////PROJECTION_SEARCH_START
+	///
+	///
+	///
+	///
+	public List<OrgNodeDTO> searchProjectedTreeByFullName(
+	        String divisionRootId,
+	        String fullNameTerm,
+	        int levelUp,
+	        int levelDown
+	) {
+	    if (levelUp <= 0 && levelDown <= 0) {
+	        return searchProjectedTreeByFullNameUsualPresentation(
+	            divisionRootId,
+	            fullNameTerm
+	        );
+	    }
+
+	    return searchProjectedTreeByDirectManagerGroups(
+	        divisionRootId,
+	        fullNameTerm,
+	        levelUp,
+	        levelDown
+	    );
+	}
 	
+	
+	public List<OrgNodeDTO> searchProjectedTreeByFullNameUsualPresentation(String divisionRootId, String fullNameTerm) {
+
+	    if (divisionRootId == null || divisionRootId.trim().isEmpty()) {
+	        return Collections.emptyList();
+	    }
+
+	    String normalizedTerm = normalize(fullNameTerm);
+	    if (normalizedTerm.isEmpty()) {
+	        return Collections.emptyList();
+	    }
+
+	    EntityManager em = emf.createEntityManager();
+
+	    try {
+	        Employee divisionRoot = em.find(Employee.class, divisionRootId);
+	        if (divisionRoot == null) {
+	            return Collections.emptyList();
+	        }
+
+	        // =========================================================
+	        // 1️⃣ MATCHES
+	        // =========================================================
+	        List<Employee> matchedEmployees = em.createQuery(
+	                "SELECT e FROM Employee e " +
+	                "WHERE LOWER(CONCAT(e.firstName, ' ', e.lastName)) LIKE :term",
+	                Employee.class
+	        )
+	        .setParameter("term", "%" + normalizedTerm + "%")
+	        .getResultList();
+
+	        if (matchedEmployees.isEmpty()) {
+	            OrgNodeDTO rootDto = toOrgNode(divisionRoot);
+	            markScopeRoot(rootDto);
+	            return Collections.singletonList(rootDto);
+	        }
+
+	        Map<String, Employee> employeeById = new LinkedHashMap<>();
+	        Map<String, String> parentMap = new HashMap<>();
+
+	        for (Employee e : matchedEmployees) {
+	            employeeById.put(e.getId(), e);
+	        }
+
+	     // =========================================================
+	     // 2️⃣ BATCH UPWARD TRAVERSAL (FIXED)
+	     // =========================================================
+	     Set<String> frontier = matchedEmployees.stream()
+	             .map(Employee::getId)
+	             .collect(Collectors.toSet());
+
+	     Set<String> processed = new HashSet<>();
+
+	     while (!frontier.isEmpty()) {
+
+	         // remove already processed
+	         Set<String> batch = frontier.stream()
+	                 .filter(id -> !processed.contains(id))
+	                 .collect(Collectors.toSet());
+
+	         if (batch.isEmpty()) break;
+
+	         processed.addAll(batch);
+
+	         List<Object[]> rows = em.createQuery(
+	                 "SELECT child.id, parent.id " +
+	                 "FROM Employee child " +
+	                 "JOIN child.manager parent " +
+	                 "WHERE child.id IN :ids",
+	                 Object[].class
+	         )
+	         .setParameter("ids", batch)
+	         .getResultList();
+
+	         Set<String> nextFrontier = new HashSet<>();
+
+	         for (Object[] row : rows) {
+	             String childId = (String) row[0];
+	             String parentId = (String) row[1];
+
+	             if (parentId == null) continue;
+
+	             // ✅ ALWAYS record relation
+	             parentMap.put(childId, parentId);
+
+	             // ✅ ALWAYS ensure parent is loaded
+	             if (!employeeById.containsKey(parentId)) {
+	                 Employee parent = em.find(Employee.class, parentId);
+	                 if (parent != null) {
+	                     employeeById.put(parentId, parent);
+	                 }
+	             }
+
+	             // ✅ ALWAYS continue climbing
+	             if (!processed.contains(parentId)) {
+	                 nextFrontier.add(parentId);
+	             }
+	         }
+
+	         frontier = nextFrontier;
+	     }
+
+	        // =========================================================
+	        // 3️⃣ FILTER ONLY PATHS THAT REACH ROOT
+	        // =========================================================
+	        Map<String, OrgNodeDTO> dtoById = new LinkedHashMap<>();
+
+	        for (Employee e : employeeById.values()) {
+	            List<String> parentPath = buildParentPath(e.getId(), divisionRootId, parentMap);
+
+	            if (parentPath.isEmpty() && !divisionRootId.equals(e.getId())) {
+	                //continue;
+	            	 // allow nodes that still have a parent in chain
+	                if (!parentMap.containsKey(e.getId())) {
+	                    continue;
+	                }
+	            }
+
+	            OrgNodeDTO dto = toOrgNode(e);
+
+	            dto.setParentPath(parentPath);
+	            dto.setNumberOfParents(parentPath.size());
+
+	            dto.setInSearchResult(true);
+	            dto.setPathNode(true);
+
+	            dtoById.put(dto.getId(), dto);
+	        }
+	     // =========================================================
+	     // 🔥 GUARANTEE ROOT PRESENCE (CRITICAL FIX)
+	     // =========================================================
+	        logger.info("divisionRootId:"+divisionRootId);
+	        if (!dtoById.containsKey(divisionRootId)) {
+	            OrgNodeDTO rootDto = toOrgNode(divisionRoot);
+
+	            rootDto.setParentPath(Collections.emptyList());
+	            rootDto.setNumberOfParents(0);
+
+	            rootDto.setInSearchResult(true);
+	            rootDto.setPathNode(true);
+	            rootDto.setScopeRoot(true);
+
+	            dtoById.put(rootDto.getId(), rootDto);
+	        }
+	     // =========================================================
+	     // 🔥 ENSURE ROOT CONNECTION (CRITICAL FIX)
+	     // =========================================================
+	     Set<String> rootChildrenIds = parentMap.entrySet().stream()
+	             .filter(e -> divisionRootId.equals(e.getValue()))
+	             .map(Map.Entry::getKey)
+	             .collect(Collectors.toSet());
+
+	     for (String childId : rootChildrenIds) {
+	         if (!dtoById.containsKey(childId)) continue;
+
+	         OrgNodeDTO child = dtoById.get(childId);
+
+	         // 🔥 FORCE correct linkage
+	         child.setManagerId(divisionRootId);
+	     }
+	        // =========================================================
+	        // 4️⃣ MARK MATCHES
+	        // =========================================================
+	        Set<String> matchedIds = matchedEmployees.stream()
+	                .map(Employee::getId)
+	                .collect(Collectors.toSet());
+
+	        for (String id : matchedIds) {
+	            OrgNodeDTO dto = dtoById.get(id);
+	            if (dto != null) {
+	                dto.setFound(true);
+	                dto.setHighlighted(true);
+	            }
+	        }
+
+	        // =========================================================
+	        // 5️⃣ CHILD COUNT (ONLY METADATA)
+	        // =========================================================
+	        Map<String, Long> counts = getRealChildCounts(em, dtoById.keySet());
+
+	        for (OrgNodeDTO dto : dtoById.values()) {
+	            int count = counts.getOrDefault(dto.getId(), 0L).intValue();
+
+	            dto.setHasChildren(count > 0);
+	            dto.setNumberOfChildren(count);
+
+	            dto.setChildrenLoaded(false);
+	            dto.setSearchFiltered(false);
+	            dto.setShowAllAvailable(false);
+	            dto.setPartiallyLoaded(false);
+
+	            if (divisionRootId.equals(dto.getId())) {
+	                markScopeRoot(dto);
+	               // dto.setManagerId(null);
+	            }
+	        }
+	     // =========================================================
+	     // 🔥 FORCE SINGLE ROOT (FINAL GUARANTEE FOR d3)
+	     // =========================================================
+	     OrgNodeDTO rootDto = dtoById.get(divisionRootId);
+	     if (rootDto != null) {
+	    	 
+	    	 logger.info("FORCE SINGLE ROOT");
+	         rootDto.setManagerId(null);
+	         rootDto.setParentPath(Collections.emptyList());
+	         rootDto.setNumberOfParents(0);
+	         rootDto.setScopeRoot(true);
+	     }
+	        return new ArrayList<>(dtoById.values());
+
+	    } finally {
+	        em.close();
+	    }
+	}
+	private List<OrgNodeDTO> searchProjectedTreeByDirectManagerGroups(
+	        String divisionRootId,
+	        String fullNameTerm,
+	        int levelUp,
+	        int levelDown
+	) {
+	    if (divisionRootId == null || divisionRootId.trim().isEmpty()) {
+	        return Collections.emptyList();
+	    }
+
+	    String normalizedTerm = normalize(fullNameTerm);
+
+	    if (normalizedTerm.isEmpty()) {
+	        return Collections.emptyList();
+	    }
+
+	    EntityManager em = emf.createEntityManager();
+
+	    try {
+	        Employee divisionRoot = em.find(Employee.class, divisionRootId);
+
+	        if (divisionRoot == null) {
+	            return Collections.emptyList();
+	        }
+
+	        List<Employee> matchedEmployees = em.createQuery(
+	                "SELECT e FROM Employee e " +
+	                "WHERE LOWER(CONCAT(e.firstName, ' ', e.lastName)) LIKE :term",
+	                Employee.class
+	        )
+	        .setParameter("term", "%" + normalizedTerm + "%")
+	        .getResultList();
+
+	        if (matchedEmployees.isEmpty()) {
+	            OrgNodeDTO rootDto = toOrgNode(divisionRoot);
+	            markScopeRoot(rootDto);
+	            rootDto.setIsManager(true);
+	            return Collections.singletonList(rootDto);
+	        }
+
+	        Map<String, OrgNodeDTO> dtoById = new LinkedHashMap<>();
+
+	        OrgNodeDTO rootDto = toOrgNode(divisionRoot);
+	        rootDto.setManagerId(null);
+	        rootDto.setParentPath(Collections.emptyList());
+	        rootDto.setNumberOfParents(0);
+	        rootDto.setScopeRoot(true);
+	        rootDto.setInSearchResult(true);
+	        rootDto.setPathNode(true);
+	        rootDto.setIsManager(true);
+	        rootDto.setPartiallyLoaded(true);
+	        rootDto.setChildrenLoaded(false);
+
+	        dtoById.put(rootDto.getId(), rootDto);
+
+	        Map<String, List<Employee>> matchesByDirectManagerId = matchedEmployees.stream()
+	                .filter(e -> e.getManager() != null)
+	                .collect(Collectors.groupingBy(
+	                        e -> e.getManager().getId(),
+	                        LinkedHashMap::new,
+	                        Collectors.toList()
+	                ));
+
+	        for (Map.Entry<String, List<Employee>> entry : matchesByDirectManagerId.entrySet()) {
+	            String directManagerId = entry.getKey();
+	            List<Employee> groupMatches = entry.getValue();
+
+	            Employee directManager = em.find(Employee.class, directManagerId);
+
+	            if (directManager == null) {
+	                continue;
+	            }
+
+	            String searchGroupName = buildEmployeeFullName(directManager);
+	            int searchGroupMatchCount = groupMatches.size();
+
+	            addManagerAncestorsUp(
+	                    directManager,
+	                    divisionRootId,
+	                    levelUp,
+	                    dtoById,
+	                    directManagerId,
+	                    searchGroupName,
+	                    searchGroupMatchCount
+	            );
+
+	            addDirectManagerNode(
+	                    directManager,
+	                    dtoById,
+	                    directManagerId,
+	                    searchGroupName,
+	                    searchGroupMatchCount
+	            );
+
+	            addFoundEmployees(
+	                    groupMatches,
+	                    dtoById,
+	                    directManagerId,
+	                    searchGroupName,
+	                    searchGroupMatchCount
+	            );
+
+	            addManagerDescendantsDown(
+	                    em,
+	                    directManager,
+	                    levelDown,
+	                    dtoById,
+	                    directManagerId,
+	                    searchGroupName,
+	                    searchGroupMatchCount
+	            );
+	        }
+
+	        Map<String, Long> counts = getRealChildCounts(em, dtoById.keySet());
+
+	        for (OrgNodeDTO dto : dtoById.values()) {
+	            int count = counts.getOrDefault(dto.getId(), 0L).intValue();
+
+	            dto.setHasChildren(count > 0);
+	            dto.setNumberOfChildren(count);
+
+	            if (dto.isManager()) {
+	                dto.setChildrenLoaded(false);
+	                dto.setPartiallyLoaded(true);
+	                dto.setShowAllAvailable(count > 0);
+	            }
+
+	            if (divisionRootId.equals(dto.getId())) {
+	                dto.setManagerId(null);
+	                dto.setParentPath(Collections.emptyList());
+	                dto.setNumberOfParents(0);
+	                dto.setScopeRoot(true);
+	                dto.setSearchGroupId(null);
+	                dto.setSearchGroupName(null);
+	                dto.setSearchGroupMatchCount(0);
+	                dto.setSearchGroupRoot(false);
+	            }
+	        }
+
+	        fixParentPathsAndNumberOfParents(dtoById, divisionRootId);
+
+	        logger.info(
+	            "searchProjectedTreeByDirectManagerGroups result size={}, groups={}",
+	            dtoById.size(),
+	            matchesByDirectManagerId.size()
+	        );
+
+	        return new ArrayList<>(dtoById.values());
+
+	    } finally {
+	        em.close();
+	    }
+	}
+	private void addManagerAncestorsUp(
+	        Employee directManager,
+	        String divisionRootId,
+	        int levelUp,
+	        Map<String, OrgNodeDTO> dtoById,
+	        String searchGroupId,
+	        String searchGroupName,
+	        int searchGroupMatchCount
+	) {
+	    Employee current = directManager;
+	    int level = 0;
+
+	    while (current != null && current.getManager() != null && level < levelUp) {
+	        Employee manager = current.getManager();
+
+	        OrgNodeDTO dto = toOrgNode(manager);
+
+	        dto.setIsManager(true);
+	        dto.setInSearchResult(true);
+	        dto.setPathNode(true);
+	        dto.setPartiallyLoaded(true);
+	        dto.setChildrenLoaded(false);
+	        dto.setSearchFiltered(true);
+	        dto.setShowAllAvailable(true);
+
+	        dto.setSearchGroupId(searchGroupId);
+	        dto.setSearchGroupName(searchGroupName);
+	        dto.setSearchGroupMatchCount(searchGroupMatchCount);
+	        dto.setSearchGroupRoot(false);
+
+	        if (manager.getId().equals(divisionRootId)) {
+	            dto.setManagerId(null);
+	            dto.setScopeRoot(true);
+	        }
+
+	        dtoById.put(dto.getId(), dto);
+
+	        if (manager.getId().equals(divisionRootId)) {
+	            break;
+	        }
+
+	        current = manager;
+	        level++;
+	    }
+	}
+	
+	private void addDirectManagerNode(
+	        Employee directManager,
+	        Map<String, OrgNodeDTO> dtoById,
+	        String searchGroupId,
+	        String searchGroupName,
+	        int searchGroupMatchCount
+	) {
+	    OrgNodeDTO dto = toOrgNode(directManager);
+
+	    dto.setIsManager(true);
+	    dto.setInSearchResult(true);
+	    dto.setPathNode(true);
+	    dto.setPartiallyLoaded(true);
+	    dto.setChildrenLoaded(false);
+	    dto.setSearchFiltered(true);
+	    dto.setShowAllAvailable(true);
+
+	    dto.setSearchGroupId(searchGroupId);
+	    dto.setSearchGroupName(searchGroupName);
+	    dto.setSearchGroupMatchCount(searchGroupMatchCount);
+	    dto.setSearchGroupRoot(true);
+
+	    dtoById.put(dto.getId(), dto);
+	}
+	
+	private void addFoundEmployees(
+	        List<Employee> groupMatches,
+	        Map<String, OrgNodeDTO> dtoById,
+	        String searchGroupId,
+	        String searchGroupName,
+	        int searchGroupMatchCount
+	) {
+	    for (Employee matched : groupMatches) {
+	        OrgNodeDTO dto = toOrgNode(matched);
+
+	        dto.setFound(true);
+	        dto.setHighlighted(true);
+	        dto.setIsManager(false);
+
+	        dto.setInSearchResult(true);
+	        dto.setPathNode(false);
+	        dto.setPartiallyLoaded(false);
+	        dto.setChildrenLoaded(true);
+
+	        dto.setSearchGroupId(searchGroupId);
+	        dto.setSearchGroupName(searchGroupName);
+	        dto.setSearchGroupMatchCount(searchGroupMatchCount);
+	        dto.setSearchGroupRoot(false);
+
+	        dtoById.put(dto.getId(), dto);
+	    }
+	}
+	
+	private void addManagerDescendantsDown(
+	        EntityManager em,
+	        Employee manager,
+	        int levelDown,
+	        Map<String, OrgNodeDTO> dtoById,
+	        String searchGroupId,
+	        String searchGroupName,
+	        int searchGroupMatchCount
+	) {
+	    if (levelDown <= 0 || manager == null) {
+	        return;
+	    }
+
+	    List<Employee> children = em.createQuery(
+	            "SELECT e FROM Employee e WHERE e.manager.id = :managerId",
+	            Employee.class
+	    )
+	    .setParameter("managerId", manager.getId())
+	    .getResultList();
+
+	    for (Employee child : children) {
+	        boolean childIsManager = hasRealChildren(em, child.getId());
+
+	        if (!childIsManager) {
+	            continue;
+	        }
+
+	        OrgNodeDTO dto = toOrgNode(child);
+
+	        dto.setIsManager(true);
+	        dto.setInSearchResult(true);
+	        dto.setPathNode(false);
+	        dto.setPartiallyLoaded(true);
+	        dto.setChildrenLoaded(false);
+	        dto.setSearchFiltered(true);
+	        dto.setShowAllAvailable(true);
+
+	        dto.setSearchGroupId(searchGroupId);
+	        dto.setSearchGroupName(searchGroupName);
+	        dto.setSearchGroupMatchCount(searchGroupMatchCount);
+	        dto.setSearchGroupRoot(false);
+
+	        dtoById.put(dto.getId(), dto);
+
+	        addManagerDescendantsDown(
+	                em,
+	                child,
+	                levelDown - 1,
+	                dtoById,
+	                searchGroupId,
+	                searchGroupName,
+	                searchGroupMatchCount
+	        );
+	    }
+	}
+	private boolean hasRealChildren(EntityManager em, String employeeId) {
+	    Long count = em.createQuery(
+	            "SELECT COUNT(e.id) FROM Employee e WHERE e.manager.id = :managerId",
+	            Long.class
+	    )
+	    .setParameter("managerId", employeeId)
+	    .getSingleResult();
+
+	    return count != null && count > 0;
+	}
+	private String buildEmployeeFullName(Employee e) {
+	    String firstName = e.getFirstName() == null ? "" : e.getFirstName().trim();
+	    String lastName = e.getLastName() == null ? "" : e.getLastName().trim();
+
+	    String fullName = (firstName + " " + lastName).trim();
+
+	    return fullName.isEmpty() ? e.getId() : fullName;
+	}
+	private void fixParentPathsAndNumberOfParents(
+	        Map<String, OrgNodeDTO> dtoById,
+	        String divisionRootId
+	) {
+	    for (OrgNodeDTO dto : dtoById.values()) {
+	        List<String> path = new ArrayList<>();
+
+	        String parentId = dto.getManagerId();
+
+	        while (parentId != null && dtoById.containsKey(parentId)) {
+	            path.add(0, parentId);
+
+	            if (divisionRootId.equals(parentId)) {
+	                break;
+	            }
+
+	            OrgNodeDTO parent = dtoById.get(parentId);
+	            parentId = parent != null ? parent.getManagerId() : null;
+	        }
+
+	        if (divisionRootId.equals(dto.getId())) {
+	            path.clear();
+	            dto.setManagerId(null);
+	        }
+
+	        dto.setParentPath(path);
+	        dto.setNumberOfParents(path.size());
+	    }
+	}
+	/*
 	public List<OrgNodeDTO> searchProjectedTreeByFullName(String divisionRootId, String fullNameTerm) {
 
 	    if (divisionRootId == null || divisionRootId.trim().isEmpty()) {
@@ -1133,6 +1726,9 @@ public List<OrgNodeDTO> findByManagerId(String parentId) {
 	        em.close();
 	    }
 	}
+	
+	*/
+	
 	private List<String> buildParentPath(
 	        String employeeId,
 	        String divisionRootId,

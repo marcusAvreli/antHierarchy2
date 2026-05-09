@@ -39,6 +39,7 @@ import antHierarchy2.util.api.StatusCode;
  http://localhost:8080/pictureGalleryHibernate/api/plugin/rest/macOrgTree/searchProjectedTreeByFullName?searchTerm=ttt
 http://localhost:8080/pictureGalleryHibernate/api/plugin/rest/macOrgTree?mode=managerial&parentId=4ae58b0f06404df2bf04e8bd9391b4e5
  */
+//http://localhost:8080/pictureGalleryHibernate/api/plugin/rest/macOrgTree/searchProjectedTreeByFullName?searchTerm=מרים ספיר&levelUp=3&levelDown=2
 //@Path("hello")
 @Path("plugin/rest/macOrgTree")
 public class HelloResource {
@@ -150,10 +151,12 @@ public class HelloResource {
 	    @Path("/searchProjectedTreeByFullName")
 	    @Produces(MediaType.APPLICATION_JSON)
 	    public ApiResponse searchProjectedTreeByFullName(           
-	            @QueryParam("searchTerm") String searchTerm
+	            @QueryParam("searchTerm") String searchTerm,
+	            @QueryParam("levelUp") int levelUp,
+	            @QueryParam("levelDown") int levelDown
 	    ) {
 	    	 logger.info("searchProjectedTreeByFullName searchTerm={}",searchTerm);
-	    	  List<OrgNodeDTO> allNodes = employeeRepo.searchProjectedTreeByFullName("64b6d7755a2a4cc1bd1e7a610c47b750",searchTerm); // fetch all nodes (or at least all relevant)
+	    	  List<OrgNodeDTO> allNodes = employeeRepo.searchProjectedTreeByFullName("64b6d7755a2a4cc1bd1e7a610c47b750",searchTerm,levelUp,levelDown); // fetch all nodes (or at least all relevant)
 	    		return ApiResponse.success(allNodes);
 	    }
 	    @GET

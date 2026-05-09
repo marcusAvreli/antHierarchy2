@@ -10,6 +10,7 @@ import java.util.Map;
 
 import javax.inject.Inject;
 import javax.persistence.EntityManagerFactory;
+import javax.ws.rs.Consumes;
 import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -34,7 +35,12 @@ import antHierarchy2.util.api.StatusCode;
 
 //http://localhost:8080/pictureGalleryHibernate/api/hello?mode=managerial&parentId=35a1e7327b90492cb7b63cf1a9eb3698
 //http://localhost:8080/pictureGalleryHibernate/api/hello?mode=managerial&parentId=4ae58b0f06404df2bf04e8bd9391b4e5
-@Path("hello")
+/*
+ http://localhost:8080/pictureGalleryHibernate/api/plugin/rest/macOrgTree/searchProjectedTreeByFullName?searchTerm=ttt
+http://localhost:8080/pictureGalleryHibernate/api/plugin/rest/macOrgTree?mode=managerial&parentId=4ae58b0f06404df2bf04e8bd9391b4e5
+ */
+//@Path("hello")
+@Path("plugin/rest/macOrgTree")
 public class HelloResource {
 
 	   private static final Logger logger = LogManager.getLogger(HelloResource.class);
@@ -114,7 +120,42 @@ public class HelloResource {
 	            );
 	        }
 	    }
+	    @GET
+		@Path("/division")
+		
+		@Consumes({ MediaType.APPLICATION_JSON })
+		@Produces({ MediaType.APPLICATION_JSON })
+		public ApiResponse division() {
+	    	try {
+	    	List<OrgNodeDTO> result = employeeRepo.getDivisions();
+			return ApiResponse.success(result);
+			}
+			catch (Exception e) {
+		        logger.error("Error retrieving organization structure", e);
+
+		        // Custom error code and message
+		        StatusCode errorCode = new StatusCode();
+		        errorCode.setErrorCode(1001L); 
+		        errorCode.setErrorMessage("Failed to load organization structure");
+
+		        return ApiResponse.error(
+		                Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(),
+		                Response.Status.INTERNAL_SERVER_ERROR.getReasonPhrase(),
+		                errorCode
+		        );
+		    }
+	    }
 	    
+	    @GET
+	    @Path("/searchProjectedTreeByFullName")
+	    @Produces(MediaType.APPLICATION_JSON)
+	    public ApiResponse searchProjectedTreeByFullName(           
+	            @QueryParam("searchTerm") String searchTerm
+	    ) {
+	    	 logger.info("searchProjectedTreeByFullName searchTerm={}",searchTerm);
+	    	  List<OrgNodeDTO> allNodes = employeeRepo.searchProjectedTreeByFullName("64b6d7755a2a4cc1bd1e7a610c47b750",searchTerm); // fetch all nodes (or at least all relevant)
+	    		return ApiResponse.success(allNodes);
+	    }
 	    @GET
 	    @Path("/search")
 	    @Produces(MediaType.APPLICATION_JSON)
@@ -167,7 +208,7 @@ public class HelloResource {
 
 	        // Step 4: Remove any existing object children to keep output flat
 	        for (OrgNodeDTO node : allNodes) {
-	            node.setChildren(null); // ensure we don't have recursive references
+	          //  node.setChildren(null); // ensure we don't have recursive references
 	        }
 
 	        // Step 4: Return a flat list — no recursive nesting
@@ -227,7 +268,7 @@ public class HelloResource {
 
 		        // Step 4: Remove any existing object children to keep output flat
 		        for (OrgNodeDTO node : allNodes) {
-		            node.setChildren(null); // ensure we don't have recursive references
+		          //  node.setChildren(null); // ensure we don't have recursive references
 		        }
 
 		        // Step 4: Return a flat list — no recursive nesting
@@ -279,52 +320,13 @@ public class HelloResource {
 
 			        // Step 4: Remove any existing object children to keep output flat
 			        for (OrgNodeDTO node : allNodes) {
-			            node.setChildren(null); // ensure we don't have recursive references
+			           // node.setChildren(null); // ensure we don't have recursive references
 			        }
 
 			        // Step 4: Return a flat list — no recursive nesting
 			        return ApiResponse.success(new ArrayList<>(nodeMap.values()));
 	    }
-	   /* @GET
-	    @Path("/division")
-	    @Produces(MediaType.APPLICATION_JSON)
-	    public ApiResponse division(	) {
-	    	String parentId = "64b6d7755a2a4cc1bd1e7a610c47b750";
-	    	Map<String,Object> devisionsByManager = new HashMap<String,Object>();
-	    	Map<String,String> divisionsMap = new HashMap<String,String>();
-	    	divisionsMap.put("devisionName", "Devision1");
-	    	devisionsByManager.put("802285098", divisionsMap);
-	    	
-	    	divisionsMap = new HashMap<String,String>();
-	    	divisionsMap.put("devisionName", "Devision2");
-	    	devisionsByManager.put("964164628", divisionsMap);
-	    	
-	    	divisionsMap = new HashMap<String,String>();
-	    	divisionsMap.put("devisionName", "Devision3");
-	    	devisionsByManager.put("674338900", divisionsMap);
-	    	
-	    	divisionsMap = new HashMap<String,String>();
-	    	divisionsMap.put("devisionName", "Devision4");
-	    	devisionsByManager.put("569503055", divisionsMap);
-	    	
-	    	divisionsMap = new HashMap<String,String>();
-	    	divisionsMap.put("devisionName", "Devision5");
-	    	devisionsByManager.put("402999213", divisionsMap);
-	    	
-	    	divisionsMap = new HashMap<String,String>();
-	    	divisionsMap.put("devisionName", "Devision6");
-	    	devisionsByManager.put("771265378", divisionsMap);
-	    	
-	    	
-	    	Iterator<Map.Entry<String,Object>> devisionsByManagerIter = devisionsByManager.entrySet().iterator();
-	    	
-	    	while(devisionsByManagerIter.hasNext()) {
-	    		Map.Entry<String,Object> devisionByManagerIter = devisionsByManagerIter.next();
-	    		String teudatZehut = devisionByManagerIter.getKey();
-	    		employeeRepo.getByTeudatZehut(teudatZehut);
-	    	}
-	    }
-	    */
+	  
 	    @GET
 	    @Path("/loadEmployeesDown")
 	    @Produces(MediaType.APPLICATION_JSON)
@@ -338,9 +340,9 @@ public class HelloResource {
 	    }
 	    @GET
 	    @Path("/getEmployeesUpToRoot")
-	    @Produces(MediaType.APPLICATION_JSON)
+	    @Produces(MediaType.APPLICATION_JSON + ";charset=UTF-8")
 	    public ApiResponse  getEmployeesUpToRoot( @QueryParam("scope") String rootId ,@QueryParam("costCenter") String costCenter,@QueryParam("field") String field) {
-	    	
+	    	  logger.info("getEmployeesUpToRoot /getEmployeesUpToRoot?scope={} costCenter={} field={}", rootId, costCenter,field);
 	    	List<OrgNodeDTO> allNodes = employeeRepo.getEmployeesUpToRoot(rootId,costCenter,field); // fetch all nodes (or at least all relevant)
 	    	return ApiResponse.success(allNodes);
 	    }

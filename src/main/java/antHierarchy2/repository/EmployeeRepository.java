@@ -2,14 +2,22 @@ package antHierarchy2.repository;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Queue;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import javax.persistence.EntityManager;
@@ -32,55 +40,7 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
 	/**
 	 * Managerial mode: find top-level employees (no manager)
 	 */
-	/*public List<OrgNodeDTO> findRootManagers() {
-		EntityManager em = emf.createEntityManager();
-		try {
-
-			String jpql = "SELECT new antHierarchy2.dto.OrgNodeDTO("
-					+ "  e.id, e.name, e.firstName, e.lastName, e.title, 'employee', "
-					+ "  e.companyCode, e.companyName, e.teudatZehut, e.gender, "
-					+ "  e.birthday, e.jobBeginDate, '', '', '', e.manager.id, "
-					+ "  e.orgUnitCode, e.costCenter, e.contractCode, "
-					+ "  e.email, e.phoneNumber, e.position, e.jobKey, e.jobName, " + "  e.image" + ", false"
-					+ ", false," + " (SELECT COUNT(c) FROM Employee c WHERE c.manager.id = e.id)" + // number of
-																									// children
-					") " + "FROM Employee e " + "JOIN Company c ON e.companyCode = c.companyCode "
-					+ "WHERE (e.companyCode = '001' AND e.title IN ('President'))";
-
-			List<OrgNodeDTO> result = em.createQuery(jpql, OrgNodeDTO.class).getResultList();
-
-			if (!result.isEmpty()) {
-
-				Set<String> managerIds = result.stream().map(OrgNodeDTO::getId).collect(Collectors.toSet());
-
-				List<Object[]> rows = em.createQuery(HAS_CHILDREN_HQL, Object[].class)
-						.setParameter("managerIds", managerIds).getResultList();
-
-				Map<String, Long> childrenCount = new HashMap<>();
-				for (Object[] row : rows) {
-					childrenCount.put((String) row[0], (Long) row[1]);
-				}
-
-				for (OrgNodeDTO node : result) {
-					Long cnt = childrenCount.get(node.getId());
-					if (cnt != null && cnt > 0) {
-						node.setHasChildren(true);
-						node.setNumberOfChildren(cnt.intValue());
-						node.setChildrenLoaded(false);
-					} else {
-						node.setHasChildren(false);
-						node.setNumberOfChildren(0);
-					}
-				}
-			}
-
-			return result;
-
-		} finally {
-			em.close();
-		}
-	}
-*/
+	
 	public List<OrgNodeDTO> findRootManagers() {
 	    EntityManager em = emf.createEntityManager();
 	    try {
@@ -143,91 +103,96 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
 	/**
 	 * Managerial mode: find employees reporting to manager
 	 */
+public List<OrgNodeDTO> findByManagerId(String parentId) {
+    logger.info("findByManagerId:" + parentId);
+    EntityManager em = emf.createEntityManager();
+    List<OrgNodeDTO> result = new ArrayList<>();
 
-	public List<OrgNodeDTO> findByManagerId(String parentId) {
-		logger.info("findByManagerId:" + parentId);
-		EntityManager em = emf.createEntityManager();
-		List<OrgNodeDTO> result = new ArrayList<>();
+    try {
+        List<Employee> employees = em.createQuery(
+                "SELECT e " +
+                "FROM Employee e " +
+                "WHERE e.manager.id = :parentId",
+                Employee.class
+        )
+        .setParameter("parentId", parentId)
+        .getResultList();
 
-		try {
-			result = em.createQuery("SELECT new antHierarchy2.dto.OrgNodeDTO(" + "  e.id, " + "  e.name, "
-					+ "  e.firstName, " + "  e.lastName, " + "  e.title, " + "  'employee', " + "  e.companyCode, "
-					+ "  e.companyName, " + "  e.teudatZehut, " + "  e.gender, " + "  e.birthday, "
-					+ "  e.jobBeginDate, " + "  '', " + "  '', " + "  '', " + "  e.manager.id, " + "  e.orgUnitCode, "
-					+ "  e.costCenter, " + "  e.contractCode, " + "  e.email, " + "  e.phoneNumber, " + "  e.position, "
-					+ "  e.jobKey, " + "  e.jobName, " + "  e.image, " + "  false, " + // childrenLoaded
-					"  false,  " + // hasChildren (temporary)
-					" (SELECT COUNT(c) FROM Employee c WHERE c.manager.id = e.id)" + // number of children
-					") " + "FROM Employee e WHERE e.manager.id = :parentId", OrgNodeDTO.class)
-					.setParameter("parentId", parentId).getResultList();
-			if (null != result && !result.isEmpty()) {
-				boolean firstRun = true;
-				List<String> parentPath = null;
-				for (OrgNodeDTO orgNode : result) {
-					String id = orgNode.getId();
-					if (firstRun) {
-						parentPath = buildParentPath(id);
-					}
-					if (null != parentPath && !parentPath.isEmpty()) {
-						orgNode.setParentPath(parentPath);
-					}
-				}
+        result = employees.stream()
+                .map(this::toOrgNode)
+                .collect(Collectors.toList());
 
-				Set<String> managerIds = result.stream().map(OrgNodeDTO::getId).collect(Collectors.toSet());
+        if (result != null && !result.isEmpty()) {
+            boolean firstRun = true;
+            List<String> parentPath = null;
 
-				List<Object[]> rows = em.createQuery(HAS_CHILDREN_HQL, Object[].class)
-						.setParameter("managerIds", managerIds).getResultList();
+            for (OrgNodeDTO orgNode : result) {
+                String id = orgNode.getId();
+                if (firstRun) {
+                    parentPath = buildParentPath(id);
+                    firstRun = false;
+                }
+                if (parentPath != null && !parentPath.isEmpty()) {
+                    orgNode.setParentPath(parentPath);
+                }
+            }
 
-				// managerId -> children count
-				Map<String, Long> childrenCount = new HashMap<>();
-				for (Object[] row : rows) {
-					childrenCount.put((String) row[0], (Long) row[1]);
-				}
-				OrgNodeDTO parent = em.createQuery("SELECT new antHierarchy2.dto.OrgNodeDTO(" + "  e.id, "
-						+ "  e.name, " + "  e.firstName, " + "  e.lastName, " + "  e.title, " + "  'employee', "
-						+ "  e.companyCode, " + "  e.companyName, " + "  e.teudatZehut, " + "  e.gender, "
-						+ "  e.birthday, " + "  e.jobBeginDate, " + "  '', " + "  '', " + "  '', " + "  e.manager.id, "
-						+ "  e.orgUnitCode, " + "  e.costCenter, " + "  e.contractCode, " + "  e.email, "
-						+ "  e.phoneNumber, " + "  e.position, " + "  e.jobKey, " + "  e.jobName, " + "  e.image, "
-						+ "  false, " + // childrenLoaded
-						"  false,  " + // hasChildren (temporary)
-						" (SELECT COUNT(c) FROM Employee c WHERE manager.id = e.id)" + // number of children
-						") " + "FROM Employee e WHERE e.id = :parentId", OrgNodeDTO.class)
-						.setParameter("parentId", parentId).getSingleResult();
+            Set<String> managerIds = result.stream()
+                    .map(OrgNodeDTO::getId)
+                    .collect(Collectors.toSet());
 
-				if (null != parent) {
-					if (null != result && result.isEmpty()) {
-						int numberOfChildren = result.size();
-						parent.setNumberOfChildren(numberOfChildren);
-						parent.setHasChildren(true);
-					} else {
-						parent.setHasChildren(false);
-						parent.setNumberOfChildren(0);
-					}
-				}
+            List<Object[]> rows = em.createQuery(HAS_CHILDREN_HQL, Object[].class)
+                    .setParameter("managerIds", managerIds)
+                    .getResultList();
 
-				// apply counts to nodes
-				for (OrgNodeDTO node : result) {
-					Long cnt = childrenCount.get(node.getId());
-					if (cnt != null && cnt > 0) {
-						node.setHasChildren(true);
-						node.setNumberOfChildren(cnt.intValue());
-						node.setChildrenLoaded(false);
+            Map<String, Long> childrenCount = new HashMap<>();
+            for (Object[] row : rows) {
+                childrenCount.put((String) row[0], (Long) row[1]);
+            }
 
-					} else {
-						node.setHasChildren(false);
-						node.setNumberOfChildren(0);
-					}
-					node.setParentId(parentId);
-					node.setParent(parent);
-				}
-			}
-			return result;
-		} finally {
-			em.close();
-		}
-	}
+            Employee parentEmployee = em.createQuery(
+                    "SELECT e FROM Employee e WHERE e.id = :parentId",
+                    Employee.class
+            )
+            .setParameter("parentId", parentId)
+            .getSingleResult();
 
+            OrgNodeDTO parent = null;
+            if (parentEmployee != null) {
+                parent = toOrgNode(parentEmployee);
+
+                if (result != null && !result.isEmpty()) {
+                    int numberOfChildren = result.size();
+                    parent.setNumberOfChildren(numberOfChildren);
+                    parent.setHasChildren(true);
+                } else {
+                    parent.setHasChildren(false);
+                    parent.setNumberOfChildren(0);
+                }
+            }
+
+            for (OrgNodeDTO node : result) {
+                Long cnt = childrenCount.get(node.getId());
+                if (cnt != null && cnt > 0) {
+                    node.setHasChildren(true);
+                    node.setNumberOfChildren(cnt.intValue());
+                    node.setChildrenLoaded(false);
+                } else {
+                    node.setHasChildren(false);
+                    node.setNumberOfChildren(0);
+                }
+
+               // node.setParentId(parentId);
+                node.setManagerId(parentId);
+              //  node.setParent(parent);
+            }
+        }
+
+        return result;
+    } finally {
+        em.close();
+    }
+}
 	public List<String> buildParentPath(String parentId) {
 		logger.info("findByManagerId:" + parentId);
 		EntityManager em = emf.createEntityManager();
@@ -680,7 +645,7 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
 				// ----- hierarchy flags -----
 				node.setHasChildren(true); // assume true, verified later
 				node.setChildrenLoaded(false);
-				node.setChildren(new ArrayList<>());
+				//node.setChildren(new ArrayList<>());
 				node.setChildrenIds(new ArrayList<>());
 				logger.info("checkPost_5");
 				result.put(node.getId(), node);
@@ -746,53 +711,53 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
 		}
 		return new ArrayList<>(result.values());
 	}
-	/*
-	 * public List<OrgNodeDTO> getEmployeesUpToRoot(String costCenter,String field)
-	 * { EntityManager em = emf.createEntityManager(); Map<String, OrgNodeDTO>
-	 * allNodes = new LinkedHashMap<>();
-	 * 
-	 * try { // Step 1: fetch starting employees List<Employee> starters =
-	 * em.createQuery( "SELECT e FROM Employee e WHERE e."+field+" = :cc",
-	 * Employee.class) .setParameter("cc", costCenter) .getResultList();
-	 * 
-	 * // Step 2: collect all employees + managers into flat map for (Employee e :
-	 * starters) { addToFlatMap(e, allNodes); }
-	 * 
-	 * // Step 3: build parentPath for each node for (OrgNodeDTO node :
-	 * allNodes.values()) { List<String> path = new ArrayList<>(); String parentId =
-	 * node.getParentId(); while (parentId != null) { OrgNodeDTO parentNode =
-	 * allNodes.get(parentId); if (parentNode == null) break; path.add(parentId);
-	 * parentId = parentNode.getParentId(); } Collections.reverse(path);
-	 * node.setParentPath(path); }
-	 * 
-	 * // Step 4: fetch children count for all nodes in batch if
-	 * (!allNodes.isEmpty()) { List<Object[]> rows = em.createQuery(
-	 * "SELECT e.manager.id, COUNT(e) FROM Employee e WHERE e.manager.id IN :ids GROUP BY e.manager.id"
-	 * , Object[].class ).setParameter("ids", allNodes.keySet()) .getResultList();
-	 * 
-	 * Map<String, Long> childrenCount = new HashMap<>(); for (Object[] row : rows)
-	 * { childrenCount.put((String) row[0], (Long) row[1]); }
-	 * 
-	 * for (OrgNodeDTO node : allNodes.values()) { Long cnt =
-	 * childrenCount.get(node.getId()); node.setHasChildren(cnt != null && cnt > 0);
-	 * node.setNumberOfChildren(cnt != null ? cnt.intValue() : 0); } }
-	 * 
-	 * // Step 5: replace parent reference with shallow object for (OrgNodeDTO node
-	 * : allNodes.values()) { String parentId = node.getParentId(); if (parentId !=
-	 * null) { OrgNodeDTO parent = allNodes.get(parentId); if (parent != null) { //
-	 * shallow copy: only basic fields OrgNodeDTO shallow = new OrgNodeDTO();
-	 * shallow.setId(parent.getId()); shallow.setName(parent.getName());
-	 * shallow.setFirstName(parent.getFirstName());
-	 * shallow.setLastName(parent.getLastName());
-	 * shallow.setTitle(parent.getTitle()); shallow.setType(parent.getType());
-	 * shallow.setCostCenter(parent.getCostCenter()); node.setParent(shallow); } } }
-	 * 
-	 * // Step 6: return flat list return new ArrayList<>(allNodes.values()); }
-	 * finally { em.close(); } }
-	 */
+	public List<OrgNodeDTO> getDivisions() {
+	    logger.info("getDivisions_started");
 
+	    List<OrgNodeDTO> result = new ArrayList<>();
+	    EntityManager em = emf.createEntityManager();
+
+	    try {
+	        // 1) manager is null -> single result
+	        Employee rootEmployee = em.createQuery(
+	                "SELECT e FROM Employee e WHERE e.manager IS NULL",
+	                Employee.class
+	            )
+	            .getSingleResult();
+
+	        result.add(toOrgNode(rootEmployee));
+
+	        // 2) teudatZehut in (...) -> multiple results
+	        List<String> teudatZehutList = Arrays.asList(
+	            "802285098",
+	            "964164628",
+	            "674338900",
+	            "569503055",
+	            "402999213",
+	            "771265378"
+	        );
+
+	        List<Employee> employees = em.createQuery(
+	                "SELECT e FROM Employee e WHERE e.teudatZehut IN :ids",
+	                Employee.class
+	            )
+	            .setParameter("ids", teudatZehutList)
+	            .getResultList();
+
+	        result.addAll(
+	            employees.stream()
+	                .map(this::toOrgNode)
+	                .collect(Collectors.toList())
+	        );
+
+	        return result;
+	    } finally {
+	        em.close();
+	    }
+	}
+	
 	public List<OrgNodeDTO> getEmployeesUpToRoot(String rootId, String searchedValue, String field) {
-
+		logger.info("getEmployeesUpToRoot repository /getEmployeesUpToRoot?scope={} searchedValue={} field={}", rootId, searchedValue,field);
 		EntityManager em = emf.createEntityManager();
 		Map<String, OrgNodeDTO> allNodes = new LinkedHashMap<>();
 
@@ -821,7 +786,7 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
 // Step 3: build parentPath (respect scope boundary)
 			for (OrgNodeDTO node : allNodes.values()) {
 				List<String> path = new ArrayList<>();
-				String parentId = node.getParentId();
+				String parentId = node.getManagerId();
 
 				while (parentId != null) {
 
@@ -835,7 +800,7 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
 					if (parentNode == null)
 						break;
 
-					parentId = parentNode.getParentId();
+					parentId = parentNode.getManagerId();
 				}
 
 				Collections.reverse(path);
@@ -864,7 +829,7 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
 
 // Step 5: shallow parent object assignment (unchanged)
 			for (OrgNodeDTO node : allNodes.values()) {
-				String parentId = node.getParentId();
+				String parentId = node.getManagerId();
 				if (parentId != null) {
 					OrgNodeDTO parent = allNodes.get(parentId);
 					if (parent != null) {
@@ -878,7 +843,7 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
 						shallow.setType(parent.getType());
 						shallow.setCostCenter(parent.getCostCenter());
 
-						node.setParent(shallow);
+						//node.setParent(shallow);
 					}
 				}
 			}
@@ -910,7 +875,8 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
 		Employee manager = e.getManager();
 		if (manager != null) {
 			OrgNodeDTO managerNode = addToFlatMapScoped(manager, map, rootId);
-			node.setParentId(managerNode.getId());
+			//node.setParentId(managerNode.getId());
+			node.setManagerId(managerNode.getId());
 		}
 
 		return node;
@@ -944,13 +910,428 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
 		Employee manager = e.getManager();
 		if (manager != null) {
 			OrgNodeDTO managerNode = addToFlatMap(manager, map);
-			node.setParentId(managerNode.getId()); // only store parentId
+			//node.setParentId(managerNode.getId()); // only store parentId
+			node.setManagerId(managerNode.getId());
 			// parent object will be assigned later as shallow copy
 		}
 
 		return node;
 	}
 
+	/////PROJECTION_SEARCH_START
+	
+	public List<OrgNodeDTO> searchProjectedTreeByFullName(String divisionRootId, String fullNameTerm) {
+
+	    if (divisionRootId == null || divisionRootId.trim().isEmpty()) {
+	        return Collections.emptyList();
+	    }
+
+	    String normalizedTerm = normalize(fullNameTerm);
+	    if (normalizedTerm.isEmpty()) {
+	        return Collections.emptyList();
+	    }
+
+	    EntityManager em = emf.createEntityManager();
+
+	    try {
+	        Employee divisionRoot = em.find(Employee.class, divisionRootId);
+	        if (divisionRoot == null) {
+	            return Collections.emptyList();
+	        }
+
+	        // =========================================================
+	        // 1️⃣ MATCHES
+	        // =========================================================
+	        List<Employee> matchedEmployees = em.createQuery(
+	                "SELECT e FROM Employee e " +
+	                "WHERE LOWER(CONCAT(e.firstName, ' ', e.lastName)) LIKE :term",
+	                Employee.class
+	        )
+	        .setParameter("term", "%" + normalizedTerm + "%")
+	        .getResultList();
+
+	        if (matchedEmployees.isEmpty()) {
+	            OrgNodeDTO rootDto = toOrgNode(divisionRoot);
+	            markScopeRoot(rootDto);
+	            return Collections.singletonList(rootDto);
+	        }
+
+	        Map<String, Employee> employeeById = new LinkedHashMap<>();
+	        Map<String, String> parentMap = new HashMap<>();
+
+	        for (Employee e : matchedEmployees) {
+	            employeeById.put(e.getId(), e);
+	        }
+
+	     // =========================================================
+	     // 2️⃣ BATCH UPWARD TRAVERSAL (FIXED)
+	     // =========================================================
+	     Set<String> frontier = matchedEmployees.stream()
+	             .map(Employee::getId)
+	             .collect(Collectors.toSet());
+
+	     Set<String> processed = new HashSet<>();
+
+	     while (!frontier.isEmpty()) {
+
+	         // remove already processed
+	         Set<String> batch = frontier.stream()
+	                 .filter(id -> !processed.contains(id))
+	                 .collect(Collectors.toSet());
+
+	         if (batch.isEmpty()) break;
+
+	         processed.addAll(batch);
+
+	         List<Object[]> rows = em.createQuery(
+	                 "SELECT child.id, parent.id " +
+	                 "FROM Employee child " +
+	                 "JOIN child.manager parent " +
+	                 "WHERE child.id IN :ids",
+	                 Object[].class
+	         )
+	         .setParameter("ids", batch)
+	         .getResultList();
+
+	         Set<String> nextFrontier = new HashSet<>();
+
+	         for (Object[] row : rows) {
+	             String childId = (String) row[0];
+	             String parentId = (String) row[1];
+
+	             if (parentId == null) continue;
+
+	             // ✅ ALWAYS record relation
+	             parentMap.put(childId, parentId);
+
+	             // ✅ ALWAYS ensure parent is loaded
+	             if (!employeeById.containsKey(parentId)) {
+	                 Employee parent = em.find(Employee.class, parentId);
+	                 if (parent != null) {
+	                     employeeById.put(parentId, parent);
+	                 }
+	             }
+
+	             // ✅ ALWAYS continue climbing
+	             if (!processed.contains(parentId)) {
+	                 nextFrontier.add(parentId);
+	             }
+	         }
+
+	         frontier = nextFrontier;
+	     }
+
+	        // =========================================================
+	        // 3️⃣ FILTER ONLY PATHS THAT REACH ROOT
+	        // =========================================================
+	        Map<String, OrgNodeDTO> dtoById = new LinkedHashMap<>();
+
+	        for (Employee e : employeeById.values()) {
+	            List<String> parentPath = buildParentPath(e.getId(), divisionRootId, parentMap);
+
+	            if (parentPath.isEmpty() && !divisionRootId.equals(e.getId())) {
+	                //continue;
+	            	 // allow nodes that still have a parent in chain
+	                if (!parentMap.containsKey(e.getId())) {
+	                    continue;
+	                }
+	            }
+
+	            OrgNodeDTO dto = toOrgNode(e);
+
+	            dto.setParentPath(parentPath);
+	            dto.setNumberOfParents(parentPath.size());
+
+	            dto.setInSearchResult(true);
+	            dto.setPathNode(true);
+
+	            dtoById.put(dto.getId(), dto);
+	        }
+	     // =========================================================
+	     // 🔥 GUARANTEE ROOT PRESENCE (CRITICAL FIX)
+	     // =========================================================
+	        logger.info("divisionRootId:"+divisionRootId);
+	        if (!dtoById.containsKey(divisionRootId)) {
+	            OrgNodeDTO rootDto = toOrgNode(divisionRoot);
+
+	            rootDto.setParentPath(Collections.emptyList());
+	            rootDto.setNumberOfParents(0);
+
+	            rootDto.setInSearchResult(true);
+	            rootDto.setPathNode(true);
+	            rootDto.setScopeRoot(true);
+
+	            dtoById.put(rootDto.getId(), rootDto);
+	        }
+	     // =========================================================
+	     // 🔥 ENSURE ROOT CONNECTION (CRITICAL FIX)
+	     // =========================================================
+	     Set<String> rootChildrenIds = parentMap.entrySet().stream()
+	             .filter(e -> divisionRootId.equals(e.getValue()))
+	             .map(Map.Entry::getKey)
+	             .collect(Collectors.toSet());
+
+	     for (String childId : rootChildrenIds) {
+	         if (!dtoById.containsKey(childId)) continue;
+
+	         OrgNodeDTO child = dtoById.get(childId);
+
+	         // 🔥 FORCE correct linkage
+	         child.setManagerId(divisionRootId);
+	     }
+	        // =========================================================
+	        // 4️⃣ MARK MATCHES
+	        // =========================================================
+	        Set<String> matchedIds = matchedEmployees.stream()
+	                .map(Employee::getId)
+	                .collect(Collectors.toSet());
+
+	        for (String id : matchedIds) {
+	            OrgNodeDTO dto = dtoById.get(id);
+	            if (dto != null) {
+	                dto.setFound(true);
+	                dto.setHighlighted(true);
+	            }
+	        }
+
+	        // =========================================================
+	        // 5️⃣ CHILD COUNT (ONLY METADATA)
+	        // =========================================================
+	        Map<String, Long> counts = getRealChildCounts(em, dtoById.keySet());
+
+	        for (OrgNodeDTO dto : dtoById.values()) {
+	            int count = counts.getOrDefault(dto.getId(), 0L).intValue();
+
+	            dto.setHasChildren(count > 0);
+	            dto.setNumberOfChildren(count);
+
+	            dto.setChildrenLoaded(false);
+	            dto.setSearchFiltered(false);
+	            dto.setShowAllAvailable(false);
+	            dto.setPartiallyLoaded(false);
+
+	            if (divisionRootId.equals(dto.getId())) {
+	                markScopeRoot(dto);
+	               // dto.setManagerId(null);
+	            }
+	        }
+	     // =========================================================
+	     // 🔥 FORCE SINGLE ROOT (FINAL GUARANTEE FOR d3)
+	     // =========================================================
+	     OrgNodeDTO rootDto = dtoById.get(divisionRootId);
+	     if (rootDto != null) {
+	    	 
+	    	 logger.info("FORCE SINGLE ROOT");
+	         rootDto.setManagerId(null);
+	         rootDto.setParentPath(Collections.emptyList());
+	         rootDto.setNumberOfParents(0);
+	         rootDto.setScopeRoot(true);
+	     }
+	        return new ArrayList<>(dtoById.values());
+
+	    } finally {
+	        em.close();
+	    }
+	}
+	private List<String> buildParentPath(
+	        String employeeId,
+	        String divisionRootId,
+	        Map<String, String> parentMap
+	) {
+	    LinkedList<String> path = new LinkedList<>();
+
+	    String current = parentMap.get(employeeId);
+
+	    while (current != null) {
+
+	        if (divisionRootId.equals(current)) {
+	            return path; // valid path
+	        }
+
+	        path.addFirst(current);
+	        current = parentMap.get(current);
+	    }
+
+	    return Collections.emptyList(); // not in division
+	}
+	private List<String> getPathToDivisionRoot(
+		    String employeeId,
+		    String divisionRootId,
+		    Map<String, String> parentIdByEmployeeId
+		) {
+		    if (employeeId == null || divisionRootId == null) {
+		        return Collections.emptyList();
+		    }
+
+		    LinkedList<String> path = new LinkedList<>();
+		    Set<String> visited = new HashSet<>();
+
+		    String currentId = employeeId;
+
+		    while (currentId != null && visited.add(currentId)) {
+		        path.addFirst(currentId);
+
+		        if (divisionRootId.equals(currentId)) {
+		            return path;
+		        }
+
+		        currentId = parentIdByEmployeeId.get(currentId);
+		    }
+
+		    return Collections.emptyList();
+		}
+
+		private Map<String, Long> getRealChildCounts(EntityManager em, Collection<String> managerIds) {
+		    if (managerIds == null || managerIds.isEmpty()) {
+		        return Collections.emptyMap();
+		    }
+
+		    return em.createQuery(
+		            "SELECT e.manager.id, COUNT(e) " +
+		            "FROM Employee e " +
+		            "WHERE e.manager.id IN :ids " +
+		            "GROUP BY e.manager.id",
+		            Object[].class
+		        )
+		        .setParameter("ids", managerIds)
+		        .getResultStream()
+		        .collect(Collectors.toMap(
+		            row -> (String) row[0],
+		            row -> (Long) row[1],
+		            (a, b) -> a,
+		            LinkedHashMap::new
+		        ));
+		}
+
+		private int countChildren(EntityManager em, String managerId) {
+		    if (managerId == null || managerId.trim().isEmpty()) {
+		        return 0;
+		    }
+
+		    Long count = em.createQuery(
+		            "SELECT COUNT(e) FROM Employee e WHERE e.manager.id = :managerId",
+		            Long.class
+		        )
+		        .setParameter("managerId", managerId)
+		        .getSingleResult();
+
+		    return count == null ? 0 : count.intValue();
+		}
+
+		private void markScopeRoot(OrgNodeDTO dto) {
+		    if (dto == null) {
+		        return;
+		    }
+
+		    dto.setScopeRoot(true);
+		    dto.setPathNode(true);
+		    dto.setInSearchResult(true);
+		    /*
+		    dto.setManagerId(null);
+		    dto.setParentPath(Collections.emptyList());
+		    dto.setNumberOfParents(0);
+		    */
+		}
+
+		private List<OrgNodeDTO> buildChildrenList(
+		    List<String> childIds,
+		    Map<String, OrgNodeDTO> dtoById
+		) {
+		    if (childIds == null || childIds.isEmpty()) {
+		        return Collections.emptyList();
+		    }
+
+		    List<OrgNodeDTO> result = new ArrayList<>();
+
+		    for (String childId : childIds) {
+		        OrgNodeDTO child = dtoById.get(childId);
+		        if (child != null) {
+		            result.add(child);
+		        }
+		    }
+
+		    return result;
+		}
+
+		private void computeFoundCountsBottomUp(
+		    String rootId,
+		    Map<String, List<String>> childrenIdsByParentId,
+		    Map<String, OrgNodeDTO> dtoById
+		) {
+		    postOrderCount(rootId, childrenIdsByParentId, dtoById, new HashSet<>());
+		}
+
+		private int postOrderCount(
+		    String nodeId,
+		    Map<String, List<String>> childrenIdsByParentId,
+		    Map<String, OrgNodeDTO> dtoById,
+		    Set<String> visiting
+		) {
+		    if (nodeId == null || !dtoById.containsKey(nodeId)) {
+		        return 0;
+		    }
+
+		    if (!visiting.add(nodeId)) {
+		        return 0;
+		    }
+
+		    OrgNodeDTO dto = dtoById.get(nodeId);
+		    int count = dto.isFound() ? 1 : 0;
+
+		    for (String childId : childrenIdsByParentId.getOrDefault(nodeId, Collections.emptyList())) {
+		        count += postOrderCount(childId, childrenIdsByParentId, dtoById, visiting);
+		    }
+
+		    dto.setFoundCountInSubtree(count);
+		    visiting.remove(nodeId);
+
+		    return count;
+		}
+
+	
+	
+	
+
+
+		
+		private int countChildren(String managerId) {
+		    if (managerId == null || managerId.trim().isEmpty()) {
+		        return 0;
+		    }
+
+		    EntityManager em = emf.createEntityManager();
+		    try {
+		        Long count = em.createQuery(
+		                "SELECT COUNT(e) FROM Employee e WHERE e.manager.id = :managerId",
+		                Long.class
+		            )
+		            .setParameter("managerId", managerId)
+		            .getSingleResult();
+
+		        return count == null ? 0 : count.intValue();
+		    } finally {
+		        em.close();
+		    }
+		}
+		private String normalize(String value) {
+		    return safe(value).trim().toLowerCase();
+		}
+
+		private String safe(String value) {
+		    return value == null ? "" : value;
+		}
+	///PROJECTION_SEARCH_END
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 	private OrgNodeDTO toOrgNode(Employee e) {
 		OrgNodeDTO dto = new OrgNodeDTO();
 
@@ -958,8 +1339,10 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
 		dto.setName(e.getName());
 		dto.setFirstName(e.getFirstName());
 		dto.setLastName(e.getLastName());
-		
+		dto.setFullName(e.getName());
 		dto.setCostCenter(e.getCostCenter());
+		dto.setPositionPlansDesc("positionPlansTest "+e.getFirstName());
+		dto.setOrgunitOrgehDesc("orgunitOrgehDesc "+ e.getLastName());
 		dto.setEmail(e.getEmail());
 		dto.setPhoneNumber(e.getPhoneNumber());
 		dto.setTitle(e.getTitle());
@@ -967,8 +1350,10 @@ public class EmployeeRepository extends GenericRepository<Employee, String> {
 		Employee manager = e.getManager();
 		if (null != manager) {
 			dto.setManagerId(manager.getId());
+		}else {
+			dto.setManagerId(null);
 		}
-		dto.setType("employee");
+		dto.setType("managerial");
 		dto.setHasChildren(false);
 		dto.setNumberOfChildren(0);
 		dto.setChildrenLoaded(false);
